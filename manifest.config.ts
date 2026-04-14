@@ -1,0 +1,17 @@
+import { defineManifest } from "@crxjs/vite-plugin";
+
+export default defineManifest({
+  manifest_version: 3,
+  name: "tabcard",
+  version: "0.1.0",
+  description: "TabCard 收藏管理助手",
+  action: {
+    default_title: "tabcard",
+    default_popup: "src/entries/popup/index.html"
+  },
+  chrome_url_overrides: {
+    newtab: "src/entries/newtab/index.html"
+  },
+  permissions: ["storage", "tabs", "activeTab"],
+  host_permissions: ["<all_urls>"]
+});
