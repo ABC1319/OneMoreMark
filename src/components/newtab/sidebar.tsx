@@ -15,23 +15,17 @@ import {
   verticalListSortingStrategy
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { MoreVertical } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from "../ui/dropdown-menu";
 import { Input } from "../ui/input";
 import type { Category } from "../../types/models";
+import { EditDeleteMenu } from "./edit-delete-menu";
+import { PanelCardShell } from "./panel-card-shell";
 
 type SidebarProps = {
   categories: Category[];
-  collapsed: boolean;
   onAddCategory: () => void;
   onSelectCategory: (categoryId: string) => void;
   editingCategoryId: string | null;
@@ -39,13 +33,17 @@ type SidebarProps = {
   onEditingCategoryChange: (categoryId: string | null) => void;
   onPendingNewCategoryChange: (categoryId: string | null) => void;
   onRenameCategory: (categoryId: string, name: string) => void;
-  onRemoveCategory: (categoryId: string) => void;
+  onRequestRemoveCategory: (categoryId: string) => void;
   onCommitCategoryOrder: (categoryIds: string[]) => void;
+  bookmarkDragActive: boolean;
+  bookmarkDragPointer: { x: number; y: number } | null;
+  bookmarkDragInsideSidebar: boolean;
+  bookmarkDropCategoryId: string | null;
+  onBookmarkDropCategoryChange: (categoryId: string | null) => void;
 };
 
 export function Sidebar({
   categories,
-  collapsed,
   onAddCategory,
   onSelectCategory,
   editingCategoryId,
@@ -53,13 +51,22 @@ export function Sidebar({
   onEditingCategoryChange,
   onPendingNewCategoryChange,
   onRenameCategory,
-  onRemoveCategory,
-  onCommitCategoryOrder
+  onRequestRemoveCategory,
+  onCommitCategoryOrder,
+  bookmarkDragActive,
+  bookmarkDragPointer,
+  bookmarkDragInsideSidebar,
+  bookmarkDropCategoryId,
+  onBookmarkDropCategoryChange
 }: SidebarProps) {
   const [draftName, setDraftName] = useState("");
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [orderedIds, setOrderedIds] = useState<string[]>([]);
   const [openMenuCategoryId, setOpenMenuCategoryId] = useState<string | null>(null);
+  const [dragOverlayWidth, setDragOverlayWidth] = useState<number | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const categoryRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const lastScrollPointerRef = useRef<string | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -82,14 +89,10 @@ export function Sidebar({
     setOrderedIds(categories.map((item) => item.id));
   }, [categories]);
 
-  if (collapsed) {
-    return null;
-  }
-
   function commitRename(categoryId: string) {
     const value = draftName.trim();
     if (!value && pendingNewCategoryId === categoryId) {
-      onRemoveCategory(categoryId);
+      onRequestRemoveCategory(categoryId);
       onPendingNewCategoryChange(null);
       onEditingCategoryChange(null);
       return;
@@ -113,13 +116,76 @@ export function Sidebar({
   const draggedCategory =
     orderedCategories.find((item) => item.id === activeCategoryId) ?? null;
 
+  useEffect(() => {
+    if (!bookmarkDragActive || !bookmarkDragPointer) {
+      lastScrollPointerRef.current = null;
+      onBookmarkDropCategoryChange(null);
+      return;
+    }
+
+    if (!bookmarkDragInsideSidebar) {
+      lastScrollPointerRef.current = null;
+      onBookmarkDropCategoryChange(null);
+      return;
+    }
+
+    const pointerKey = `${bookmarkDragPointer.x}:${bookmarkDragPointer.y}`;
+    const pointerChanged = lastScrollPointerRef.current !== pointerKey;
+    lastScrollPointerRef.current = pointerKey;
+
+    const scrollContainer = scrollContainerRef.current;
+    if (scrollContainer && pointerChanged) {
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const edgeOffset = 24;
+      const scrollStep = 18;
+
+      if (
+        bookmarkDragPointer.x >= containerRect.left &&
+        bookmarkDragPointer.x <= containerRect.right
+      ) {
+        if (bookmarkDragPointer.y <= containerRect.top + edgeOffset) {
+          scrollContainer.scrollBy({ top: -scrollStep });
+        } else if (bookmarkDragPointer.y >= containerRect.bottom - edgeOffset) {
+          scrollContainer.scrollBy({ top: scrollStep });
+        }
+      }
+    }
+
+    const hoveredCategoryId =
+      orderedCategories.find((category) => {
+        const node = categoryRefs.current[category.id];
+        if (!node) {
+          return false;
+        }
+
+        const rect = node.getBoundingClientRect();
+        return (
+          bookmarkDragPointer.x >= rect.left &&
+          bookmarkDragPointer.x <= rect.right &&
+          bookmarkDragPointer.y >= rect.top &&
+          bookmarkDragPointer.y <= rect.bottom
+        );
+      })?.id ?? null;
+
+    onBookmarkDropCategoryChange(hoveredCategoryId);
+  }, [
+    bookmarkDragActive,
+    bookmarkDragInsideSidebar,
+    bookmarkDragPointer,
+    onBookmarkDropCategoryChange,
+    orderedCategories
+  ]);
+
   function handleDragStart(event: DragStartEvent) {
-    setActiveCategoryId(String(event.active.id));
+    const categoryId = String(event.active.id);
+    setActiveCategoryId(categoryId);
+    setDragOverlayWidth(categoryRefs.current[categoryId]?.getBoundingClientRect().width ?? null);
   }
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     setActiveCategoryId(null);
+    setDragOverlayWidth(null);
 
     if (!over || active.id === over.id) {
       return;
@@ -135,7 +201,7 @@ export function Sidebar({
   }
 
   return (
-    <Card className="flex h-[calc(100vh-32px)] w-[260px] flex-col p-3">
+    <Card className="flex h-[calc(100vh-32px)] flex-col border-border shadow-[0_10px_24px_rgba(15,23,42,0.04)] ring-0 dark:border-white/10 dark:shadow-[0_18px_40px_rgba(0,0,0,0.28)] p-3">
       <div className="mb-3 flex min-h-10 items-center justify-between px-2 py-1">
         <div>
           <div className="text-[18px] font-semibold tracking-[-0.01em]">TabCard</div>
@@ -143,7 +209,7 @@ export function Sidebar({
         <Button
           size="icon"
           variant="outline"
-          className="h-8 w-8 rounded-lg border-border/70 bg-transparent text-foreground shadow-none hover:border-border hover:bg-transparent hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)]"
+          className="h-8 w-8 rounded-lg border-border/70 bg-transparent text-foreground shadow-none hover:border-border hover:bg-transparent hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)] dark:hover:border-white/12 dark:hover:shadow-[0_18px_36px_rgba(0,0,0,0.32)]"
           onClick={onAddCategory}
         >
           +
@@ -155,31 +221,46 @@ export function Sidebar({
         sensors={sensors}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
-        onDragCancel={() => setActiveCategoryId(null)}
+        onDragCancel={() => {
+          setActiveCategoryId(null);
+          setDragOverlayWidth(null);
+        }}
       >
         <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
-          <div className="flex-1 space-y-2 overflow-y-auto">
+          <div ref={scrollContainerRef} className="flex-1 space-y-2 overflow-y-auto">
             {orderedCategories.map((category) => (
               <SortableCategoryItem
                 key={category.id}
                 category={category}
+                bookmarkDragActive={bookmarkDragActive}
                 editingCategoryId={editingCategoryId}
                 draftName={draftName}
                 isDragging={activeCategoryId === category.id}
                 isMenuOpen={openMenuCategoryId === category.id}
+                highlightAsDropTarget={
+                  bookmarkDragInsideSidebar && bookmarkDropCategoryId === category.id
+                }
                 onDraftNameChange={setDraftName}
                 onEditCategory={onEditingCategoryChange}
                 onCommitRename={commitRename}
-                onDeleteCategory={onRemoveCategory}
+                onDeleteCategory={onRequestRemoveCategory}
                 onMenuOpenChange={setOpenMenuCategoryId}
                 onSelectCategory={onSelectCategory}
+                onNodeChange={(node) => {
+                  categoryRefs.current[category.id] = node;
+                }}
               />
             ))}
           </div>
         </SortableContext>
 
         <DragOverlay dropAnimation={null}>
-          {draggedCategory ? <CategoryDragOverlay category={draggedCategory} /> : null}
+          {draggedCategory ? (
+            <CategoryDragOverlay
+              category={draggedCategory}
+              width={dragOverlayWidth}
+            />
+          ) : null}
         </DragOverlay>
       </DndContext>
     </Card>
@@ -188,30 +269,36 @@ export function Sidebar({
 
 type SortableCategoryItemProps = {
   category: Category;
+  bookmarkDragActive: boolean;
   editingCategoryId: string | null;
   draftName: string;
   isDragging: boolean;
   isMenuOpen: boolean;
+  highlightAsDropTarget: boolean;
   onDraftNameChange: (value: string) => void;
   onEditCategory: (categoryId: string | null) => void;
   onCommitRename: (categoryId: string) => void;
   onDeleteCategory: (categoryId: string) => void;
   onMenuOpenChange: (categoryId: string | null) => void;
   onSelectCategory: (categoryId: string) => void;
+  onNodeChange: (node: HTMLDivElement | null) => void;
 };
 
 function SortableCategoryItem({
   category,
+  bookmarkDragActive,
   editingCategoryId,
   draftName,
   isDragging,
   isMenuOpen,
+  highlightAsDropTarget,
   onDraftNameChange,
   onEditCategory,
   onCommitRename,
   onDeleteCategory,
   onMenuOpenChange,
-  onSelectCategory
+  onSelectCategory,
+  onNodeChange
 }: SortableCategoryItemProps) {
   const {
     attributes,
@@ -222,31 +309,79 @@ function SortableCategoryItem({
     isDragging: sortableDragging
   } = useSortable({
     id: category.id,
-    disabled: editingCategoryId === category.id
+    disabled: editingCategoryId === category.id || bookmarkDragActive
   });
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => {
+        setNodeRef(node);
+        onNodeChange(node);
+      }}
       style={{
         transform: CSS.Transform.toString(transform),
         transition
       }}
-      className={`relative flex w-full cursor-grab select-none items-center gap-2 rounded-xl border bg-card px-3 py-3 text-left transition-all ${
-        sortableDragging || isDragging
-          ? "border-dashed border-border/70 bg-transparent shadow-none"
-          : "hover:border-border hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)]"
-      }`}
-      onClick={() => onSelectCategory(category.id)}
       {...attributes}
       {...listeners}
     >
+      <PanelCardShell
+        className="cursor-grab gap-2 py-3"
+        placeholder={sortableDragging || isDragging}
+        dragging={bookmarkDragActive}
+        highlighted={highlightAsDropTarget}
+        onClick={() => onSelectCategory(category.id)}
+      >
+        <CategoryCardContent
+          category={category}
+          editing={editingCategoryId === category.id}
+          draftName={draftName}
+          hidden={sortableDragging || isDragging}
+          isMenuOpen={isMenuOpen}
+          onDraftNameChange={onDraftNameChange}
+          onCommitRename={onCommitRename}
+          onEditCategory={onEditCategory}
+          onDeleteCategory={onDeleteCategory}
+          onMenuOpenChange={onMenuOpenChange}
+        />
+      </PanelCardShell>
+    </div>
+  );
+}
+
+type CategoryCardContentProps = {
+  category: Category;
+  editing: boolean;
+  draftName: string;
+  hidden?: boolean;
+  isMenuOpen?: boolean;
+  onDraftNameChange?: (value: string) => void;
+  onCommitRename?: (categoryId: string) => void;
+  onEditCategory?: (categoryId: string | null) => void;
+  onDeleteCategory?: (categoryId: string) => void;
+  onMenuOpenChange?: (categoryId: string | null) => void;
+};
+
+function CategoryCardContent({
+  category,
+  editing,
+  draftName,
+  hidden = false,
+  isMenuOpen = false,
+  onDraftNameChange = () => undefined,
+  onCommitRename = () => undefined,
+  onEditCategory = () => undefined,
+  onDeleteCategory = () => undefined,
+  onMenuOpenChange = () => undefined
+}: CategoryCardContentProps) {
+  return (
+    <>
       <div
         className={`min-w-0 flex-1 overflow-hidden text-left ${
-          sortableDragging || isDragging ? "opacity-0" : "cursor-grab active:cursor-grabbing"
+          hidden ? "opacity-0" : "cursor-grab active:cursor-grabbing"
         }`}
       >
-        {editingCategoryId === category.id ? (
+        {editing ? (
           <Input
             autoFocus
             className="h-9 w-full rounded-md border-border/60 bg-muted/30 px-2.5 shadow-none focus-visible:border-border/80 focus-visible:ring-0"
@@ -273,54 +408,35 @@ function SortableCategoryItem({
           </div>
         )}
       </div>
-      <DropdownMenu
+      <EditDeleteMenu
+        hidden={hidden}
         open={isMenuOpen}
         onOpenChange={(open) => onMenuOpenChange(open ? category.id : null)}
-      >
-        <DropdownMenuTrigger asChild>
-          <Button
-            data-role="category-menu"
-            size="icon"
-            type="button"
-            variant="ghost"
-            className={`h-8 w-8 shrink-0 cursor-pointer rounded-md hover:border-border hover:bg-transparent hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)] ${
-              sortableDragging || isDragging ? "opacity-0" : ""
-            }`}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <MoreVertical className="h-4 w-4 text-muted-foreground" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="top-9" align="end">
-          <DropdownMenuItem
-            onSelect={() => {
-              onEditCategory(category.id);
-            }}
-          >
-            编辑
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => {
-              onDeleteCategory(category.id);
-            }}
-          >
-            删除
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+        onTriggerClick={(event) => event.stopPropagation()}
+        onTriggerPointerDown={(event) => event.stopPropagation()}
+        onContentClick={(event) => event.stopPropagation()}
+        onEdit={() => onEditCategory(category.id)}
+        onDelete={() => onDeleteCategory(category.id)}
+      />
+    </>
   );
 }
 
-function CategoryDragOverlay({ category }: { category: Category }) {
+function CategoryDragOverlay({
+  category,
+  width
+}: {
+  category: Category;
+  width: number | null;
+}) {
   return (
-    <div className="w-[236px] rounded-xl border border-border bg-white px-3 py-3 shadow-[0_18px_40px_rgba(15,23,42,0.16)] ring-1 ring-black/5">
-      <div className="flex items-center gap-2">
-        <div className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium">
-          {category.name}
-        </div>
-        <MoreVertical className="h-4 w-4 text-muted-foreground" />
-      </div>
+    <div
+      className="scale-[1.04]"
+      style={width ? { width, minWidth: width } : undefined}
+    >
+      <PanelCardShell className="gap-2 py-3">
+        <CategoryCardContent category={category} editing={false} draftName="" />
+      </PanelCardShell>
     </div>
   );
 }

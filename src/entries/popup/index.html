@@ -1,9 +1,68 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
+    <script>
+      (() => {
+        try {
+          const raw = localStorage.getItem("tabcard_state");
+          const state = raw ? JSON.parse(raw) : null;
+          const themeMode = state?.themeMode;
+          const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+          const resolvedTheme =
+            themeMode === "light" || themeMode === "dark"
+              ? themeMode
+              : mediaQuery.matches
+                ? "dark"
+                : "light";
+          const root = document.documentElement;
+          root.classList.toggle("dark", resolvedTheme === "dark");
+          root.style.colorScheme = resolvedTheme;
+          root.style.backgroundColor = resolvedTheme === "dark" ? "#17181d" : "#ffffff";
+          root.style.color = resolvedTheme === "dark" ? "#f5f5f5" : "#171717";
+          root.style.setProperty(
+            "--app-preload-bg",
+            resolvedTheme === "dark" ? "#17181d" : "#ffffff"
+          );
+          root.style.setProperty(
+            "--app-preload-fg",
+            resolvedTheme === "dark" ? "#f5f5f5" : "#171717"
+          );
+        } catch {
+          const root = document.documentElement;
+          root.classList.remove("dark");
+          root.style.colorScheme = "light";
+          root.style.backgroundColor = "#ffffff";
+          root.style.color = "#171717";
+          root.style.setProperty("--app-preload-bg", "#ffffff");
+          root.style.setProperty("--app-preload-fg", "#171717");
+        }
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>tabcard popup</title>
+    <title>TabCard Popup</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #ffffff;
+        color: #171717;
+      }
+      @media (prefers-color-scheme: dark) {
+        html,
+        body {
+          background: #17181d;
+          color: #f5f5f5;
+        }
+      }
+      body {
+        opacity: 0;
+      }
+      html.app-ready body {
+        opacity: 1;
+      }
+    </style>
     <script type="module" src="./main.tsx"></script>
   </head>
   <body>

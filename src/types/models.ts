@@ -1,3 +1,7 @@
+export type ThemeMode = "light" | "dark" | "system";
+export type LocaleMode = "system" | "zh-CN" | "en";
+export type ResolvedLocale = "zh-CN" | "en";
+
 export type Category = {
   id: string;
   name: string;
@@ -15,6 +19,8 @@ export type Bookmark = {
 
 export type AppState = {
   sidebarCollapsed: boolean;
+  themeMode: ThemeMode;
+  localeMode: LocaleMode;
   categories: Category[];
   bookmarks: Bookmark[];
 };

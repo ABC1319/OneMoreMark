@@ -1,365 +1,404 @@
 import {
-  closestCenter,
   DndContext,
-  DragEndEvent,
-  DragOverlay,
-  DragOverEvent,
-  DragStartEvent,
-  PointerSensor,
-  useDroppable,
-  useSensor,
-  useSensors
+  DragOverlay
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  rectSortingStrategy,
-  useSortable
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { Search, MoreVertical } from "lucide-react";
+import { X } from "lucide-react";
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
-  type MutableRefObject,
-  type ReactNode
+  type ChangeEvent
 } from "react";
 
-import { Button } from "../ui/button";
 import { Card } from "../ui/card";
-import { Input } from "../ui/input";
-import type { Bookmark, Category } from "../../types/models";
+import { useBookmarkDrag } from "../../hooks/use-bookmark-drag";
+import { exportBookmarksToHtml } from "../../services/bookmark-html";
+import type { ManualSyncResult, SyncSnapshot, SyncStatus } from "../../services/storage";
+import type { AppState, Bookmark, LocaleMode, ThemeMode } from "../../types/models";
 import { BookmarkCard } from "./bookmark-card";
-
-type Group = {
-  category: Category;
-  items: Bookmark[];
-};
+import { CategoryBookmarkSection, type BookmarkGroup } from "./category-bookmark-section";
+import { ContentToolbar } from "./content-toolbar";
+import { LanguageDialog } from "./language-dialog";
+import { SyncStatusDialog } from "./sync-status-dialog";
+import { ThemeDialog } from "./theme-dialog";
+import { useI18n } from "../../lib/i18n";
 
 type ContentPanelProps = {
-  groups: Group[];
+  state: AppState;
+  groups: BookmarkGroup[];
   search: string;
   onSearchChange: (value: string) => void;
   onToggleSidebar: () => void;
+  sidebarCollapsed: boolean;
+  themeMode: ThemeMode;
+  localeMode: LocaleMode;
+  onThemeModeChange: (themeMode: ThemeMode) => void;
+  onLocaleModeChange: (localeMode: LocaleMode) => void;
   onEditBookmark: (bookmark: Bookmark) => void;
+  onRemoveBookmark: (bookmarkId: string) => void;
+  onImportBookmarksHtml: (html: string) => void;
   activeCategoryId: string | null;
   onCommitBookmarkLayout: (
     layout: Array<{ id: string; categoryId: string; order: number }>
   ) => void;
+  bookmarkDragPointer: { x: number; y: number } | null;
+  sidebarBoundaryRight: number | null;
+  sidebarDropCategoryId: string | null;
+  onBookmarkDragStateChange: (bookmarkId: string | null) => void;
+  onMoveBookmarkToCategoryEnd: (bookmarkId: string, categoryId: string) => void;
+  syncStatus: SyncStatus | null;
+  onSyncCloud: () => Promise<ManualSyncResult>;
+  onGetSyncOverview: () => Promise<SyncSnapshot>;
 };
 
 export function ContentPanel({
+  state,
   groups,
   search,
   onSearchChange,
   onToggleSidebar,
+  sidebarCollapsed,
+  themeMode,
+  localeMode,
+  onThemeModeChange,
+  onLocaleModeChange,
   onEditBookmark,
+  onRemoveBookmark,
+  onImportBookmarksHtml,
   activeCategoryId,
-  onCommitBookmarkLayout
+  onCommitBookmarkLayout,
+  bookmarkDragPointer,
+  sidebarBoundaryRight,
+  sidebarDropCategoryId,
+  onBookmarkDragStateChange,
+  onMoveBookmarkToCategoryEnd,
+  syncStatus,
+  onSyncCloud,
+  onGetSyncOverview
 }: ContentPanelProps) {
-  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const [activeBookmarkId, setActiveBookmarkId] = useState<string | null>(null);
-  const [previewGroups, setPreviewGroups] = useState<Group[]>(groups);
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 6
-      }
-    })
-  );
-
-  const menuItems = useMemo(
-    () => ["全部合并", "全部展开", "导出", "导入", "主题"],
-    []
-  );
+  const { messages } = useI18n();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<string[]>([]);
+  const [showImportSuccess, setShowImportSuccess] = useState(false);
+  const [showSyncQuotaWarning, setShowSyncQuotaWarning] = useState(false);
+  const [manualSyncToast, setManualSyncToast] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+  const [syncSnapshot, setSyncSnapshot] = useState<SyncSnapshot | null>(null);
+  const [themeDialogOpen, setThemeDialogOpen] = useState(false);
+  const [languageDialogOpen, setLanguageDialogOpen] = useState(false);
+  const successToastTimerRef = useRef<number | null>(null);
+  const syncWarningTimerRef = useRef<number | null>(null);
+  const manualSyncToastTimerRef = useRef<number | null>(null);
+  const {
+    activeBookmarkId,
+    collisionDetection,
+    draggedBookmark,
+    handleDragCancel,
+    handleDragEnd,
+    handleDragMove,
+    handleDragOver,
+    handleDragStart,
+    lockedSectionHeights,
+    renderedGroups,
+    scrollContainerRef,
+    sectionRefs,
+    sensors,
+    shouldFreezePreview
+  } = useBookmarkDrag({
+    groups,
+    activeCategoryId,
+    bookmarkDragPointer,
+    sidebarBoundaryRight,
+    sidebarDropCategoryId,
+    onCommitBookmarkLayout,
+    onBookmarkDragStateChange,
+    onMoveBookmarkToCategoryEnd
+  });
 
   useEffect(() => {
-    if (!activeBookmarkId) {
-      setPreviewGroups(groups);
-    }
-  }, [activeBookmarkId, groups]);
+    return () => {
+      if (successToastTimerRef.current) {
+        window.clearTimeout(successToastTimerRef.current);
+      }
+
+      if (syncWarningTimerRef.current) {
+        window.clearTimeout(syncWarningTimerRef.current);
+      }
+
+      if (manualSyncToastTimerRef.current) {
+        window.clearTimeout(manualSyncToastTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
-    if (!activeCategoryId) {
+    if (syncStatus?.type !== "quota-exceeded") {
       return;
     }
 
-    sectionRefs.current[activeCategoryId]?.scrollIntoView({
-      behavior: "smooth",
-      block: "start"
-    });
-  }, [activeCategoryId]);
-
-  const draggedBookmark =
-    previewGroups.flatMap((group) => group.items).find((item) => item.id === activeBookmarkId) ??
-    null;
-
-  function moveBookmarkPreview(activeId: string, overId: string, overType: "card" | "group") {
-    setPreviewGroups((current) => {
-      const nextGroups = current.map((group) => ({
-        ...group,
-        items: [...group.items]
-      }));
-
-      let activeBookmark: Bookmark | null = null;
-      let sourceGroupIndex = -1;
-
-      nextGroups.forEach((group, groupIndex) => {
-        const bookmarkIndex = group.items.findIndex((item) => item.id === activeId);
-        if (bookmarkIndex >= 0) {
-          activeBookmark = group.items[bookmarkIndex];
-          sourceGroupIndex = groupIndex;
-          group.items.splice(bookmarkIndex, 1);
-        }
-      });
-
-      if (!activeBookmark) {
-        return current;
-      }
-
-      if (overType === "group") {
-        const targetGroup = nextGroups.find((group) => group.category.id === overId);
-        if (!targetGroup) {
-          return current;
-        }
-        targetGroup.items.push({ ...activeBookmark, categoryId: targetGroup.category.id });
-        return nextGroups;
-      }
-
-      for (const group of nextGroups) {
-        const targetIndex = group.items.findIndex((item) => item.id === overId);
-        if (targetIndex >= 0) {
-          group.items.splice(targetIndex, 0, {
-            ...activeBookmark,
-            categoryId: group.category.id
-          });
-          return nextGroups;
-        }
-      }
-
-      if (sourceGroupIndex >= 0) {
-        nextGroups[sourceGroupIndex].items.push(activeBookmark);
-      }
-
-      return nextGroups;
-    });
-  }
-
-  function handleDragStart(event: DragStartEvent) {
-    setActiveBookmarkId(String(event.active.id));
-  }
-
-  function handleDragOver(event: DragOverEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) {
-      return;
+    setShowSyncQuotaWarning(true);
+    if (syncWarningTimerRef.current) {
+      window.clearTimeout(syncWarningTimerRef.current);
     }
+    syncWarningTimerRef.current = window.setTimeout(() => {
+      setShowSyncQuotaWarning(false);
+      syncWarningTimerRef.current = null;
+    }, 2000);
+  }, [syncStatus]);
 
-    const overData = over.data.current as
-      | { type: "card"; categoryId: string }
-      | { type: "group"; categoryId: string }
-      | undefined;
+  useEffect(() => {
+    setCollapsedCategoryIds((current) =>
+      current.filter((categoryId) => groups.some((group) => group.category.id === categoryId))
+    );
+  }, [groups]);
 
-    if (!overData) {
-      return;
-    }
 
-    moveBookmarkPreview(
-      String(active.id),
-      overData.type === "group" ? overData.categoryId : String(over.id),
-      overData.type
+  function toggleCategoryCollapsed(categoryId: string) {
+    setCollapsedCategoryIds((current) =>
+      current.includes(categoryId)
+        ? current.filter((item) => item !== categoryId)
+        : [...current, categoryId]
     );
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    const { over } = event;
-    if (!over) {
-      setActiveBookmarkId(null);
-      setPreviewGroups(groups);
+  function collapseAllCategories() {
+    setCollapsedCategoryIds(groups.map((group) => group.category.id));
+  }
+
+  function expandAllCategories() {
+    setCollapsedCategoryIds([]);
+  }
+
+  function handleExport() {
+    const html = exportBookmarksToHtml(state);
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "tabcard-bookmarks.html";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
       return;
     }
 
-    const layout = previewGroups.flatMap((group) =>
-      group.items.map((item, index) => ({
-        id: item.id,
-        categoryId: group.category.id,
-        order: index
-      }))
-    );
-    onCommitBookmarkLayout(layout);
-    setActiveBookmarkId(null);
+    try {
+      const html = await file.text();
+      onImportBookmarksHtml(html);
+      setShowImportSuccess(true);
+      if (successToastTimerRef.current) {
+        window.clearTimeout(successToastTimerRef.current);
+      }
+      successToastTimerRef.current = window.setTimeout(() => {
+        setShowImportSuccess(false);
+      }, 2200);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Import failed.";
+      window.alert(message);
+    }
+    event.target.value = "";
+  }
+
+  function showManualSyncToast(message: string) {
+    setManualSyncToast(message);
+    if (manualSyncToastTimerRef.current) {
+      window.clearTimeout(manualSyncToastTimerRef.current);
+    }
+    manualSyncToastTimerRef.current = window.setTimeout(() => {
+      setManualSyncToast(null);
+      manualSyncToastTimerRef.current = null;
+    }, 2200);
+  }
+
+  async function handleSyncCloud(): Promise<ManualSyncResult> {
+    setSyncing(true);
+    try {
+      const result = await onSyncCloud();
+      const messageMap: Record<ManualSyncResult, string> = {
+        uploaded: messages.sync.toastUploaded,
+        downloaded: messages.sync.toastDownloaded,
+        "already-synced": messages.sync.toastLatest,
+        "quota-exceeded": messages.sync.toastQuota,
+        unavailable: messages.sync.toastUnavailable,
+        failed: messages.sync.toastFailed
+      };
+
+      showManualSyncToast(messageMap[result]);
+      setSyncSnapshot(await onGetSyncOverview());
+      return result;
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function handleOpenSyncStatus() {
+    setSyncDialogOpen(true);
+    setSyncSnapshot(await onGetSyncOverview());
   }
 
   return (
     <div className="flex-1">
-      <Card className="flex h-[calc(100vh-32px)] flex-col overflow-hidden">
-        <div className="flex items-center gap-3 border-b px-5 py-4">
-          <div className="text-lg font-semibold">内容区</div>
-          <Button size="icon" variant="outline" onClick={onToggleSidebar}>
-            <span className="text-base">≡</span>
-          </Button>
-          <div className="relative ml-2 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="搜索标题或网址"
-              value={search}
-              onChange={(event) => onSearchChange(event.target.value)}
-            />
+      {showSyncQuotaWarning ? (
+        <div className="fixed left-1/2 top-5 z-[80] -translate-x-1/2">
+          <div className="flex items-center gap-3 rounded-xl border border-border bg-popover px-4 py-2 text-sm font-medium text-popover-foreground shadow-[0_14px_28px_rgba(15,23,42,0.10)] dark:shadow-[0_18px_40px_rgba(0,0,0,0.34)]">
+            <span>收藏较多，已保存在本机，Chrome 同步空间不足，可选择手动导出和导入</span>
+            <button
+              type="button"
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+              aria-label={messages.content.closeSyncWarning}
+              onClick={() => {
+                if (syncWarningTimerRef.current) {
+                  window.clearTimeout(syncWarningTimerRef.current);
+                  syncWarningTimerRef.current = null;
+                }
+                setShowSyncQuotaWarning(false);
+              }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label={menuItems.join(" / ")}
-            title={menuItems.join(" / ")}
-          >
-            <MoreVertical className="h-4 w-4" />
-          </Button>
         </div>
+      ) : null}
 
-        <div className="flex-1 overflow-y-auto p-5">
+      {showImportSuccess ? (
+        <div
+          className={`pointer-events-none fixed left-1/2 z-[80] -translate-x-1/2 ${
+            showSyncQuotaWarning || manualSyncToast ? "top-16" : "top-5"
+          }`}
+        >
+          <div className="rounded-xl border border-border bg-popover px-4 py-2 text-sm font-medium text-popover-foreground shadow-[0_14px_28px_rgba(15,23,42,0.10)] dark:shadow-[0_18px_40px_rgba(0,0,0,0.34)]">
+            {messages.content.importSuccess}
+          </div>
+        </div>
+      ) : null}
+
+      {manualSyncToast ? (
+        <div
+          className={`pointer-events-none fixed left-1/2 z-[80] -translate-x-1/2 ${
+            showSyncQuotaWarning ? "top-16" : "top-5"
+          }`}
+        >
+          <div className="rounded-xl border border-border bg-popover px-4 py-2 text-sm font-medium text-popover-foreground shadow-[0_14px_28px_rgba(15,23,42,0.10)] dark:shadow-[0_18px_40px_rgba(0,0,0,0.34)]">
+            {manualSyncToast}
+          </div>
+        </div>
+      ) : null}
+
+      {syncing ? (
+        <div
+          className={`pointer-events-none fixed left-1/2 z-[80] -translate-x-1/2 ${
+            showSyncQuotaWarning || manualSyncToast ? "top-16" : "top-5"
+          }`}
+        >
+          <div className="rounded-xl border border-border bg-popover px-4 py-2 text-sm font-medium text-popover-foreground shadow-[0_14px_28px_rgba(15,23,42,0.10)] dark:shadow-[0_18px_40px_rgba(0,0,0,0.34)]">
+            {messages.sync.syncing}
+          </div>
+        </div>
+      ) : null}
+
+      <Card className="flex h-[calc(100vh-32px)] flex-col overflow-hidden border-border shadow-[0_10px_24px_rgba(15,23,42,0.04)] ring-0 dark:border-white/10 dark:shadow-[0_18px_40px_rgba(0,0,0,0.28)] p-3">
+        <ContentToolbar
+          search={search}
+          sidebarCollapsed={sidebarCollapsed}
+          onSearchChange={onSearchChange}
+          onToggleSidebar={onToggleSidebar}
+          onCollapseAll={collapseAllCategories}
+          onExpandAll={expandAllCategories}
+          onExport={handleExport}
+          onImport={() => fileInputRef.current?.click()}
+          onOpenSyncStatus={handleOpenSyncStatus}
+          onOpenTheme={() => setThemeDialogOpen(true)}
+          onOpenLanguage={() => setLanguageDialogOpen(true)}
+        />
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".html,text/html"
+          className="hidden"
+          onChange={handleImportFile}
+        />
+
+        <ThemeDialog
+          open={themeDialogOpen}
+          themeMode={themeMode}
+          onOpenChange={setThemeDialogOpen}
+          onThemeModeChange={onThemeModeChange}
+        />
+
+        <LanguageDialog
+          open={languageDialogOpen}
+          localeMode={localeMode}
+          onOpenChange={setLanguageDialogOpen}
+          onLocaleModeChange={onLocaleModeChange}
+        />
+
+        <SyncStatusDialog
+          open={syncDialogOpen}
+          syncing={syncing}
+          snapshot={syncSnapshot}
+          onOpenChange={setSyncDialogOpen}
+          onSync={handleSyncCloud}
+        />
+
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto px-2 pb-2 pt-1"
+          style={shouldFreezePreview ? { overflowY: "hidden" } : undefined}
+        >
           <DndContext
-            collisionDetection={closestCenter}
+            autoScroll={false}
+            collisionDetection={collisionDetection}
             sensors={sensors}
             onDragStart={handleDragStart}
+            onDragMove={handleDragMove}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
-            onDragCancel={() => {
-              setActiveBookmarkId(null);
-              setPreviewGroups(groups);
-            }}
+            onDragCancel={handleDragCancel}
           >
             <div className="space-y-6">
-              {previewGroups.map((group) => (
+              {renderedGroups.map((group) => (
                 <CategoryBookmarkSection
                   key={group.category.id}
                   group={group}
                   activeBookmarkId={activeBookmarkId}
+                  freezePreview={shouldFreezePreview}
+                  collapsed={collapsedCategoryIds.includes(group.category.id)}
+                  onToggleCollapsed={() => toggleCategoryCollapsed(group.category.id)}
                   onEditBookmark={onEditBookmark}
+                  onRemoveBookmark={onRemoveBookmark}
                   sectionRefs={sectionRefs}
+                  lockedHeight={lockedSectionHeights[group.category.id]}
                 />
               ))}
 
-              {!previewGroups.some((group) => group.items.length > 0) && (
+              {!renderedGroups.some((group) => group.items.length > 0) && (
                 <Card className="p-8 text-center text-sm text-muted-foreground">
-                  没有找到匹配的网站
+                  {messages.content.noSearchResult}
                 </Card>
               )}
             </div>
 
             <DragOverlay dropAnimation={null}>
               {draggedBookmark ? (
-                <div className="w-[280px] scale-[1.04] rotate-[-1deg]">
-                  <BookmarkCard bookmark={draggedBookmark} onEdit={() => undefined} />
+                <div className="w-[280px] scale-[1.04]">
+                  <BookmarkCard
+                    bookmark={draggedBookmark}
+                    onEdit={() => undefined}
+                    onDelete={() => undefined}
+                    onOpen={() => undefined}
+                  />
                 </div>
               ) : null}
             </DragOverlay>
           </DndContext>
         </div>
       </Card>
-    </div>
-  );
-}
-
-function CategoryBookmarkSection({
-  group,
-  activeBookmarkId,
-  onEditBookmark,
-  sectionRefs
-}: {
-  group: Group;
-  activeBookmarkId: string | null;
-  onEditBookmark: (bookmark: Bookmark) => void;
-  sectionRefs: MutableRefObject<Record<string, HTMLDivElement | null>>;
-}) {
-  return (
-    <section
-      ref={(node) => {
-        sectionRefs.current[group.category.id] = node;
-      }}
-      className="space-y-3"
-    >
-      <div className="border-b pb-2 text-base font-semibold">{group.category.name}</div>
-      <SortableContext
-        items={group.items.map((item) => item.id)}
-        strategy={rectSortingStrategy}
-      >
-        <CategoryDropZone categoryId={group.category.id}>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
-            {group.items.map((bookmark) => (
-              <SortableBookmarkCard
-                key={bookmark.id}
-                bookmark={bookmark}
-                dragging={activeBookmarkId === bookmark.id}
-                onEdit={() => onEditBookmark(bookmark)}
-              />
-            ))}
-          </div>
-        </CategoryDropZone>
-      </SortableContext>
-    </section>
-  );
-}
-
-function CategoryDropZone({
-  categoryId,
-  children
-}: {
-  categoryId: string;
-  children: ReactNode;
-}) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: `group:${categoryId}`,
-    data: {
-      type: "group",
-      categoryId
-    }
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={isOver ? "rounded-2xl border border-dashed border-black/25 p-2" : ""}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SortableBookmarkCard({
-  bookmark,
-  onEdit,
-  dragging
-}: {
-  bookmark: Bookmark;
-  onEdit: () => void;
-  dragging: boolean;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({
-      id: bookmark.id,
-      data: {
-        type: "card",
-        categoryId: bookmark.categoryId
-      }
-    });
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition
-      }}
-      {...attributes}
-      {...listeners}
-    >
-      <BookmarkCard
-        bookmark={bookmark}
-        dragging={dragging || isDragging}
-        onEdit={onEdit}
-      />
     </div>
   );
 }
