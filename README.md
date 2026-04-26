@@ -2,6 +2,8 @@
 
 Chrome 新标签页收藏管理插件。
 
+![Popup Preview](./docs/images/main.png)
+
 TabCard 不想替代书签栏，而是希望帮你更轻松地管理那些：
 
 - 不常打开，但不想丢的网站
@@ -36,22 +38,9 @@ TabCard 适合：
 - 既想本地保存，也希望可以同步或导出备份的人
 
 ## 界面预览
-
-你可以在这里放项目截图：
-
-```text
-docs/images/preview-light.png
-docs/images/preview-dark.png
-docs/images/popup.png
-```
-
-如果后面你准备补截图，README 可以直接替换成：
-
-```md
-![Light Preview](docs/images/preview-light.png)
-![Dark Preview](docs/images/preview-dark.png)
-![Popup Preview](docs/images/popup.png)
-```
+![Light Preview](./docs/images/preview-light.png)
+![Dark Preview](./docs/images/preview-dark.png)
+![Popup Preview](./docs/images/popup.png)
 
 ## 安装方式
 
