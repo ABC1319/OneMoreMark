@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import "../../index.css";
 import { PopupPage } from "../../components/popup/popup-page";
 import { useAppState } from "../../hooks/use-app-state";
+import { applyPreloadTheme } from "../../lib/apply-preload-theme";
 import { I18nProvider } from "../../lib/i18n";
 import { syncDocumentTheme } from "../../lib/theme";
 import {
@@ -13,6 +14,8 @@ import {
   openTabCardTab,
   type TabInfo
 } from "../../services/tabs";
+
+applyPreloadTheme();
 
 requestAnimationFrame(() => {
   document.documentElement.classList.add("app-ready");

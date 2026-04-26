@@ -22,6 +22,5 @@ export default defineManifest({
   chrome_url_overrides: {
     newtab: "src/entries/newtab/index.html"
   },
-  permissions: ["storage", "tabs", "activeTab", "favicon"],
-  host_permissions: ["<all_urls>"]
+  permissions: ["storage", "tabs", "activeTab", "favicon"]
 });

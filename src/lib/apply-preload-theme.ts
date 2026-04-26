@@ -1,0 +1,33 @@
+function applyFallbackTheme() {
+  const root = document.documentElement;
+  root.classList.remove("dark");
+  root.style.colorScheme = "light";
+  root.style.backgroundColor = "#ffffff";
+  root.style.color = "#171717";
+  root.style.setProperty("--app-preload-bg", "#ffffff");
+  root.style.setProperty("--app-preload-fg", "#171717");
+}
+
+export function applyPreloadTheme() {
+  try {
+    const raw = localStorage.getItem("tabcard_state");
+    const state = raw ? JSON.parse(raw) : null;
+    const themeMode = state?.themeMode;
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const resolvedTheme =
+      themeMode === "light" || themeMode === "dark"
+        ? themeMode
+        : mediaQuery.matches
+          ? "dark"
+          : "light";
+    const root = document.documentElement;
+    root.classList.toggle("dark", resolvedTheme === "dark");
+    root.style.colorScheme = resolvedTheme;
+    root.style.backgroundColor = resolvedTheme === "dark" ? "#17181d" : "#ffffff";
+    root.style.color = resolvedTheme === "dark" ? "#f5f5f5" : "#171717";
+    root.style.setProperty("--app-preload-bg", resolvedTheme === "dark" ? "#17181d" : "#ffffff");
+    root.style.setProperty("--app-preload-fg", resolvedTheme === "dark" ? "#f5f5f5" : "#171717");
+  } catch {
+    applyFallbackTheme();
+  }
+}

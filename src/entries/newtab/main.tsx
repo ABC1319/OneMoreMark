@@ -7,9 +7,12 @@ import { ContentPanel } from "../../components/newtab/content-panel";
 import { DeleteCategoryDialog } from "../../components/newtab/delete-category-dialog";
 import { Sidebar } from "../../components/newtab/sidebar";
 import { useAppState } from "../../hooks/use-app-state";
+import { applyPreloadTheme } from "../../lib/apply-preload-theme";
 import { I18nProvider } from "../../lib/i18n";
 import { syncDocumentTheme } from "../../lib/theme";
 import type { Bookmark } from "../../types/models";
+
+applyPreloadTheme();
 
 requestAnimationFrame(() => {
   document.documentElement.classList.add("app-ready");
