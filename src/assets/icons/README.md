@@ -1,6 +1,6 @@
 # Icon Directory
 
-将 TabCard 的扩展图标文件放在这里。
+将 oneMoreMark 的扩展图标文件放在这里。
 
 建议至少准备以下文件：
 

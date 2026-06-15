@@ -24,6 +24,14 @@ export function createMockState(locale: ResolvedLocale = "zh-CN", localeMode: Lo
         icon: "",
         categoryId: "c1",
         order: 1
+      },
+      {
+        id: "b3",
+        title: isEnglish ? "OpenAI Official" : "OpenAI 官网",
+        url: "https://openai.com",
+        icon: "",
+        categoryId: "c1",
+        order: 2
       }
     ]
   };

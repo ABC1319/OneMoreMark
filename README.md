@@ -1,180 +1,125 @@
-# TabCard
+# OneMoreMark
 
-Chrome 新标签页收藏管理插件。
+[简体中文](./README.zh-CN.md)
 
-![Popup Preview](./docs/images/main.png)
+If your browser bookmark bar is already too crowded, your bookmark folders keep getting deeper, and your temporary research tabs are always too useful to close, OneMoreMark is built for that everyday situation.
 
-TabCard 不想替代书签栏，而是希望帮你更轻松地管理那些：
+It is not here to make you “save more links.” It helps you put the websites you have saved, want to save, or have not had time to organize yet into a clearer new tab workspace. Every time you open a new tab, you can return to your own resource map instead of digging through the bookmark bar, browser history, and a long row of open tabs.
 
-- 不常打开，但不想丢的网站
-- 需要按主题分类整理的资源
-- 想跨设备同步或手动备份的收藏
+![OneMoreMark new tab bookmark manager](./docs/images/about-hero-en.png)
 
-你可以把它理解成：
+## What OneMoreMark Solves
 
-```text
-收藏夹的管理助手
-```
+Many websites are not opened every day, but they are still worth keeping. AI tools, developer documentation, design inspiration, product references, learning materials, research links, and articles to read later all fall into this category.
 
-## 功能亮点
+Traditional bookmarks can save them, but organizing and revisiting them is not always easy:
 
-- 新标签页展示收藏内容，左侧分类，右侧网站卡片
-- 支持分类拖拽、卡片拖拽、跨分类移动
-- 支持直接将卡片拖到左侧分类中
-- 支持搜索标题和网址
-- 支持导入 Chrome 书签 HTML
-- 支持导出为 HTML 文件
-- 支持 Chrome 同步
-- 支持浅色、深色、跟随浏览器
-- 支持一键保存当前窗口全部标签页到“临时保存”
+- The bookmark bar has limited space, so frequently used sites and low-frequency resources get mixed together.
+- Folder levels become too deep, and saved links are rarely opened again.
+- Temporary research can leave you with a full row of tabs: closing them feels risky, but keeping them open gets in the way.
+- As your collection grows, it becomes harder to remember why a link was saved in the first place.
 
-## 适合谁
+OneMoreMark takes a direct approach: move these websites out of the crowded bookmark bar, reorganize them with categories and cards, and make bookmarks easier to see, search, move, and back up.
 
-TabCard 适合：
+## Turn New Tab Into A Bookmark Workspace
 
-- 习惯收藏很多网站，但书签栏放不下的人
-- 会长期积累工具站、灵感站、资源站的人
-- 希望新标签页直接看到收藏内容的人
-- 既想本地保存，也希望可以同步或导出备份的人
+After installing OneMoreMark, your Chrome new tab page becomes a visual bookmark panel. Categories stay on the left, website cards stay on the right, and you can organize resources around the way you actually work.
 
-## 界面预览
-![Light Preview](./docs/images/preview-light.png)
-![Dark Preview](./docs/images/preview-dark.png)
-![Popup Preview](./docs/images/popup.png)
+![New tab bookmark workspace](./docs/images/about-newtab-workbench-en.png)
 
-## 安装方式
+It is useful for managing:
 
-### 开发模式
+- Tool entrances you use every day.
+- Resource collections for a specific project.
+- Design, development, product, learning, and other topic-based resources.
+- Temporary research pages you want to process later.
 
-```bash
-npm install
-npm run dev
-```
+In the new tab page, you can create categories, rename categories, drag to reorder them, and move cards between categories. Compared with bookmarks hidden inside browser menus, the card view is easier to scan and revisit.
 
-然后打开：
+## Save The Current Website In One Click
 
-```text
-chrome://extensions
-```
+When you find a page worth keeping, click the OneMoreMark icon in the browser toolbar, choose a category in the popup, and save the current page.
 
-打开“开发者模式”，按 CRXJS 提示加载开发产物目录。
+![Save a website in one click](./docs/images/about-save-current-page-en.png)
 
-### 正式打包
+This is useful for pages that you may need later, but do not want to interrupt your current work to organize immediately. Save them to a suitable category first, then refine the structure from the new tab page later.
 
-```bash
-npm install
-npm run build
-```
+If the current URL has already been saved, OneMoreMark avoids creating a duplicate. If you want to move it to another category, you can do that too.
 
-然后在 `chrome://extensions` 中选择“加载已解压的扩展程序”，加载项目下的 `dist` 目录。
+## Put Away A Whole Set Of Temporary Tabs
 
-建议正式使用时优先加载 `dist`。
+During research, comparison, documentation lookup, or inspiration hunting, it is common to open a full row of temporary tabs. They may not all deserve a permanent place on the bookmark bar, but closing them directly can lose useful context.
 
-## 基本使用
+OneMoreMark can save the bookmarkable tabs in the current window in one action and archive them into a temporary category. You can put the work session away first, bring the browser back to a cleaner state, and review those pages later.
 
-### 收藏当前网页
+## Import, Export, And Sync
 
-打开插件弹窗，点击某个分类，即可把当前网页保存到该分类。
+If you already have a collection of Chrome bookmarks, you can import them into OneMoreMark through a bookmark HTML file. If you want to back up or migrate your data, you can export your OneMoreMark collection as a Chrome-compatible bookmark file.
 
-如果当前网址已经存在：
+![Import, export, and sync](./docs/images/about-import-export-sync-en.png)
 
-- 点击当前分类：取消收藏
-- 点击其他分类：移动到新分类
+OneMoreMark currently supports:
 
-### 分类管理
+- Importing Chrome bookmark HTML files.
+- Exporting current bookmarks as an HTML file.
+- Preserving the category structure.
+- Syncing bookmark data when Chrome sync is available.
+- Viewing local and cloud sync status.
 
-- 新增分类
-- 编辑分类名称
-- 删除分类
-- 拖拽调整顺序
+Your bookmark data is stored in browser storage. OneMoreMark does not add a separate account system, and it does not force your collection into a specific cloud service. You can use Chrome sync, or manually back up your data through exported files.
 
-### 卡片管理
+## Details For Daily Use
 
-- 点击卡片，在新标签页打开网站
-- 编辑网站名称、网址、自定义 icon
-- 删除卡片
-- 分类内排序
-- 跨分类移动
-- 直接拖到左侧分类，自动放到目标分类最后
+OneMoreMark does not try to be complicated. It tries to make bookmark management feel smooth in daily use. Categories stay fixed on the left, content stays focused on the right, search remains visible, and import/export, sync status, and theme switching live in the tool area until you need them.
 
-### 搜索
+![Dark theme](./docs/images/about-dark-theme-en.png)
 
-支持搜索：
+The plugin currently supports:
 
-- 网站标题
-- 网站网址
+- A new tab bookmark panel.
+- Quick saving from the extension popup.
+- Category management and drag sorting.
+- Bookmark card sorting and moving across categories.
+- Search by title and URL.
+- Chrome bookmark HTML import and export.
+- Chrome sync status viewing and manual sync.
+- Light, dark, and browser-matched themes.
+- Simplified Chinese and English interfaces.
 
-搜索时左侧分类保持不变，右侧没有结果的分类会暂时隐藏。
+## Installation
 
-## 导入与导出
+If you just want to use it normally, installing from the Chrome Web Store is recommended. It is the simplest option and makes future updates easier.
 
-### 导入
+**Click to install: Chrome Web Store - OneMoreMark**
 
-支持导入 Chrome 导出的书签 HTML 文件。
+[https://chromewebstore.google.com/detail/tabcard/mimfanignegkbnkcenlnkpigpnpkmbgk](https://chromewebstore.google.com/detail/tabcard/mimfanignegkbnkcenlnkpigpnpkmbgk)
 
-特点：
+If the Chrome Web Store is temporarily unavailable, or if you prefer manual installation, you can download the extension package from GitHub Releases. If GitHub is difficult to access, you can also use the Gitee repository and Gitee Releases.
 
-- 增量导入
-- 不覆盖已有收藏
+**Click to view: OneMoreMark GitHub repository**
 
-### 导出
+[https://github.com/seven-share/OneMoreMark](https://github.com/seven-share/OneMoreMark)
 
-支持导出当前收藏为 HTML 文件。
+**Click to download: GitHub Releases package**
 
-导出的文件可以：
+[https://github.com/seven-share/OneMoreMark/releases](https://github.com/seven-share/OneMoreMark/releases)
 
-- 重新导入 TabCard
-- 导入 Chrome 浏览器书签
+**Click to view: OneMoreMark Gitee repository**
 
-## 同步与备份
+[https://gitee.com/helloxiaotong/OneMoreMark](https://gitee.com/helloxiaotong/OneMoreMark)
 
-右上角菜单中可打开“同步状态”弹窗，查看：
+**Click to download: Gitee Releases package**
 
-- 本地最近更新时间
-- 云端最近更新时间
-- 云端状态
-- 云端数据大小
+[https://gitee.com/helloxiaotong/OneMoreMark/releases](https://gitee.com/helloxiaotong/OneMoreMark/releases)
 
-如果 Chrome 同步可用，可在弹窗中手动点击“同步云端”。
+### **Manual Installation Steps**
 
-如果 Chrome 同步不可用，仍然可以通过导出和导入进行备份与迁移。
+1. Open the GitHub Releases or Gitee Releases page, then download the latest ZIP package.
+2. Extract the ZIP package to a local folder.
+3. Open `chrome://extensions/` in the Chrome address bar.
+4. Turn on “Developer mode” in the top-right corner.
+5. Click “Load unpacked.”
+6. Select the extracted extension folder.
+7. After installation, open a new tab to enter OneMoreMark.
 
-## 一键保存全部标签页
-
-插件弹窗中支持：
-
-```text
-一键保存全部标签页并关闭
-```
-
-执行后会：
-
-1. 将当前窗口所有可收藏网页保存到 `临时保存`
-2. 自动打开一个新的 TabCard 页面
-3. 关闭刚才的网页标签
-
-## 主题
-
-支持三种主题模式：
-
-- 浅色
-- 深色
-- 跟随浏览器
-
-## Icon 说明
-
-- 自动 icon 主要依赖浏览器能力获取
-- 也支持手动填写自定义 icon
-- 如果图标无法获取，会显示默认地球图标
-
-这不会影响收藏功能本身。
-
-## 当前说明
-
-- 开发模式下，部分扩展能力可能不如正式打包稳定
-- 图标、同步、新标签页覆盖等功能建议优先在 `npm run build` 后验证
-- Chrome 同步依赖用户浏览器当前的同步状态
-
-## 项目状态
-
-目前 TabCard 已经完成主要功能闭环，适合日常个人使用，也适合继续做细节打磨或后续发布。
+If there are multiple folders after extraction, choose the level that contains `manifest.json`. Chrome extensions must be loaded from that directory.

@@ -62,7 +62,7 @@ export async function closeTabs(tabIds: number[]) {
   await chrome.tabs.remove(tabIds);
 }
 
-export async function openTabCardTab() {
+export async function openOneMoreMarkTab() {
   if (typeof chrome === "undefined" || !chrome.tabs?.create) {
     return null;
   }

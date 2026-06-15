@@ -17,6 +17,22 @@ export type Bookmark = {
   order: number;
 };
 
+export type FeaturedLinkConfig = {
+  enabled: boolean;
+  showRedDot: boolean;
+  locales: Record<ResolvedLocale, {
+    text: string;
+    url: string;
+  }>;
+  version: string;
+};
+
+export type RecommendedBookmarkConfig = {
+  title: string;
+  url: string;
+  icon: string;
+};
+
 export type AppState = {
   sidebarCollapsed: boolean;
   themeMode: ThemeMode;

@@ -11,5 +11,16 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url))
     }
   },
+  server: {
+    port: 5173,
+    strictPort: true,
+    cors: {
+      origin: [/^chrome-extension:\/\/.+$/, /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/]
+    },
+    hmr: {
+      host: "localhost",
+      port: 5173
+    }
+  },
   plugins: [react(), crx({ manifest })]
 });

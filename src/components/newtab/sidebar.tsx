@@ -204,7 +204,7 @@ export function Sidebar({
     <Card className="flex h-[calc(100vh-32px)] flex-col border-border shadow-[0_10px_24px_rgba(15,23,42,0.04)] ring-0 dark:border-white/10 dark:shadow-[0_18px_40px_rgba(0,0,0,0.28)] p-3">
       <div className="mb-3 flex min-h-10 items-center justify-between px-2 py-1">
         <div>
-          <div className="text-[18px] font-semibold tracking-[-0.01em]">TabCard</div>
+          <div className="text-[18px] font-semibold tracking-[-0.01em]">OneMoreMark</div>
         </div>
         <Button
           size="icon"

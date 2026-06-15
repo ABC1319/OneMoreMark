@@ -13,8 +13,21 @@ import {
 import { Card } from "../ui/card";
 import { useBookmarkDrag } from "../../hooks/use-bookmark-drag";
 import { exportBookmarksToHtml } from "../../services/bookmark-html";
+import {
+  FEATURED_LINK_REFRESH_INTERVAL_MS,
+  fetchFeaturedLinkConfig,
+  loadCachedFeaturedLinkConfig,
+  loadClickedFeaturedLinkVersion,
+  markFeaturedLinkClicked
+} from "../../services/remote-config";
 import type { ManualSyncResult, SyncSnapshot, SyncStatus } from "../../services/storage";
-import type { AppState, Bookmark, LocaleMode, ThemeMode } from "../../types/models";
+import type {
+  AppState,
+  Bookmark,
+  FeaturedLinkConfig,
+  LocaleMode,
+  ThemeMode
+} from "../../types/models";
 import { BookmarkCard } from "./bookmark-card";
 import { CategoryBookmarkSection, type BookmarkGroup } from "./category-bookmark-section";
 import { ContentToolbar } from "./content-toolbar";
@@ -22,6 +35,7 @@ import { LanguageDialog } from "./language-dialog";
 import { SyncStatusDialog } from "./sync-status-dialog";
 import { ThemeDialog } from "./theme-dialog";
 import { useI18n } from "../../lib/i18n";
+import { resolveLocaleMode } from "../../lib/locale";
 
 type ContentPanelProps = {
   state: AppState;
@@ -51,6 +65,38 @@ type ContentPanelProps = {
   onGetSyncOverview: () => Promise<SyncSnapshot>;
 };
 
+function resolveFeaturedLinkLocale(config: FeaturedLinkConfig, locale: "zh-CN" | "en") {
+  const localized = config.locales[locale];
+  const zhCN = config.locales["zh-CN"];
+  const en = config.locales.en;
+
+  if (
+    locale === "en" &&
+    localized.text === zhCN.text &&
+    localized.url === zhCN.url &&
+    zhCN.text === "更多精彩"
+  ) {
+    return {
+      text: "More",
+      url: "https://onemoremark.pages.dev/en/"
+    };
+  }
+
+  if (
+    locale === "zh-CN" &&
+    localized.text === en.text &&
+    localized.url === en.url &&
+    en.text === "More"
+  ) {
+    return {
+      text: "更多精彩",
+      url: "https://onemoremark.pages.dev/zh/"
+    };
+  }
+
+  return localized;
+}
+
 export function ContentPanel({
   state,
   groups,
@@ -77,6 +123,7 @@ export function ContentPanel({
   onGetSyncOverview
 }: ContentPanelProps) {
   const { messages } = useI18n();
+  const resolvedLocale = resolveLocaleMode(localeMode);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<string[]>([]);
   const [showImportSuccess, setShowImportSuccess] = useState(false);
@@ -87,6 +134,8 @@ export function ContentPanel({
   const [syncSnapshot, setSyncSnapshot] = useState<SyncSnapshot | null>(null);
   const [themeDialogOpen, setThemeDialogOpen] = useState(false);
   const [languageDialogOpen, setLanguageDialogOpen] = useState(false);
+  const [featuredLink, setFeaturedLink] = useState<FeaturedLinkConfig | null>(null);
+  const [clickedFeaturedLinkVersion, setClickedFeaturedLinkVersion] = useState<string | null>(null);
   const successToastTimerRef = useRef<number | null>(null);
   const syncWarningTimerRef = useRef<number | null>(null);
   const manualSyncToastTimerRef = useRef<number | null>(null);
@@ -129,6 +178,49 @@ export function ContentPanel({
       if (manualSyncToastTimerRef.current) {
         window.clearTimeout(manualSyncToastTimerRef.current);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadFeaturedLink() {
+      const [cachedConfig, clickedVersion] = await Promise.all([
+        loadCachedFeaturedLinkConfig(),
+        loadClickedFeaturedLinkVersion()
+      ]);
+
+      if (!active) {
+        return;
+      }
+
+      setFeaturedLink(cachedConfig);
+      setClickedFeaturedLinkVersion(clickedVersion);
+
+      try {
+        const remoteConfig = await fetchFeaturedLinkConfig();
+        if (active) {
+          setFeaturedLink(remoteConfig);
+        }
+      } catch {
+        // Keep the cached config when Cloudflare is temporarily unavailable.
+      }
+    }
+
+    void loadFeaturedLink();
+    const refreshTimer = window.setInterval(() => {
+      fetchFeaturedLinkConfig()
+        .then((remoteConfig) => {
+          if (active) {
+            setFeaturedLink(remoteConfig);
+          }
+        })
+        .catch(() => undefined);
+    }, FEATURED_LINK_REFRESH_INTERVAL_MS);
+
+    return () => {
+      active = false;
+      window.clearInterval(refreshTimer);
     };
   }, []);
 
@@ -176,7 +268,7 @@ export function ContentPanel({
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "tabcard-bookmarks.html";
+    anchor.download = "onemoremark-bookmarks.html";
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -239,6 +331,13 @@ export function ContentPanel({
   async function handleOpenSyncStatus() {
     setSyncDialogOpen(true);
     setSyncSnapshot(await onGetSyncOverview());
+  }
+
+  async function handleOpenFeaturedLink(config: FeaturedLinkConfig) {
+    const localizedFeaturedLink = resolveFeaturedLinkLocale(config, resolvedLocale);
+    setClickedFeaturedLinkVersion(config.version);
+    await markFeaturedLinkClicked(config.version);
+    window.open(localizedFeaturedLink.url, "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -362,7 +461,7 @@ export function ContentPanel({
             onDragCancel={handleDragCancel}
           >
             <div className="space-y-6">
-              {renderedGroups.map((group) => (
+              {renderedGroups.map((group, index) => (
                 <CategoryBookmarkSection
                   key={group.category.id}
                   group={group}
@@ -374,6 +473,22 @@ export function ContentPanel({
                   onRemoveBookmark={onRemoveBookmark}
                   sectionRefs={sectionRefs}
                   lockedHeight={lockedSectionHeights[group.category.id]}
+                  featuredLink={index === 0 ? featuredLink : null}
+                  featuredLinkText={
+                    index === 0 && featuredLink
+                      ? resolveFeaturedLinkLocale(featuredLink, resolvedLocale).text
+                      : ""
+                  }
+                  showFeaturedLinkDot={
+                    index === 0 &&
+                    Boolean(featuredLink?.showRedDot) &&
+                    featuredLink?.version !== clickedFeaturedLinkVersion
+                  }
+                  onFeaturedLinkOpen={
+                    index === 0 && featuredLink
+                      ? () => void handleOpenFeaturedLink(featuredLink)
+                      : undefined
+                  }
                 />
               ))}
 

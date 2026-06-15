@@ -11,7 +11,7 @@ import {
   closeTabs,
   getActiveTabInfo,
   getSavableCurrentWindowTabs,
-  openTabCardTab,
+  openOneMoreMarkTab,
   type TabInfo
 } from "../../services/tabs";
 
@@ -106,7 +106,7 @@ function PopupApp() {
       }))
     );
 
-    await openTabCardTab();
+    await openOneMoreMarkTab();
     await closeTabs(savableTabs.map((tab) => tab.id));
   }
 

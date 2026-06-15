@@ -1,6 +1,7 @@
 import { createMockState, mockState } from "../data/mock";
 import { detectBrowserLocale } from "../lib/locale";
 import { normalizeStoredIcon } from "../lib/favicon";
+import { fetchRecommendedBookmarksConfig } from "./remote-config";
 import type { AppState } from "../types/models";
 
 const STORAGE_KEY = "tabcard_state";
@@ -10,6 +11,9 @@ const SYNC_META_KEY = "tabcard_sync_meta";
 const SYNC_CHUNK_KEY_PREFIX = "tabcard_sync_chunk_";
 const SYNC_CHUNK_BYTES = 6000;
 const SYNC_PAYLOAD_LIMIT = 90 * 1024;
+const BOOTSTRAP_META_UPDATED_AT = 0;
+const INITIAL_SYNC_RETRY_COUNT = 5;
+const INITIAL_SYNC_RETRY_DELAY_MS = 700;
 const textEncoder = new TextEncoder();
 
 type StoredMeta = {
@@ -56,6 +60,9 @@ export type SyncSnapshot = {
     size: number;
     oversized: boolean;
     available: boolean;
+    rawKeyCount: number;
+    hasChunkMeta: boolean;
+    hasLegacyState: boolean;
   };
 };
 
@@ -214,6 +221,16 @@ function createMeta(updatedAt = Date.now()): StoredMeta {
   };
 }
 
+function isBootstrapMeta(meta: StoredMeta | SyncMeta | null | undefined) {
+  return meta?.updatedAt === BOOTSTRAP_META_UPDATED_AT;
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 function stripLargeIconsForSync(state: AppState): AppState {
   return {
     ...state,
@@ -331,7 +348,19 @@ async function loadSyncedState() {
 
   const result = await chrome.storage.sync.get(null);
   const meta = normalizeSyncMeta(result[SYNC_META_KEY]);
-  if (!meta || meta.oversized || meta.chunkCount <= 0) {
+  if (!meta) {
+    const legacyState = result[STORAGE_KEY];
+    if (!legacyState) {
+      return null;
+    }
+
+    return {
+      state: normalizeState(legacyState),
+      meta: normalizeMeta(result[LOCAL_META_KEY]) ?? createMeta(1)
+    };
+  }
+
+  if (meta.oversized || meta.chunkCount <= 0) {
     return null;
   }
 
@@ -354,17 +383,42 @@ async function loadSyncedState() {
   }
 }
 
+async function loadSyncedStateWithRetry(retryCount = INITIAL_SYNC_RETRY_COUNT) {
+  let synced = await loadSyncedState();
+  for (let attempt = 0; !synced && attempt < retryCount; attempt += 1) {
+    await delay(INITIAL_SYNC_RETRY_DELAY_MS);
+    synced = await loadSyncedState();
+  }
+
+  return synced;
+}
+
 async function loadRawSyncSnapshot() {
   if (!hasChromeSyncStorage()) {
     return null;
   }
 
   const result = await chrome.storage.sync.get(null);
+  const rawKeyCount = Object.keys(result).length;
   const meta = normalizeSyncMeta(result[SYNC_META_KEY]);
   if (!meta) {
+    if (result[STORAGE_KEY]) {
+      const legacyPayload = JSON.stringify(result[STORAGE_KEY]);
+      return {
+        meta: normalizeMeta(result[LOCAL_META_KEY]) ?? createMeta(1),
+        size: textEncoder.encode(legacyPayload).length,
+        rawKeyCount,
+        hasChunkMeta: false,
+        hasLegacyState: true
+      };
+    }
+
     return {
       meta: null,
-      size: 0
+      size: 0,
+      rawKeyCount,
+      hasChunkMeta: false,
+      hasLegacyState: false
     };
   }
 
@@ -378,7 +432,10 @@ async function loadRawSyncSnapshot() {
 
   return {
     meta,
-    size
+    size,
+    rawKeyCount,
+    hasChunkMeta: true,
+    hasLegacyState: Boolean(result[STORAGE_KEY])
   };
 }
 
@@ -459,6 +516,145 @@ async function saveStateToSync(state: AppState, meta: StoredMeta) {
     await markSyncOversized(payload.length, meta);
     return "quota-exceeded" as const;
   }
+}
+
+async function mergeRecommendedBookmarksForNewInstall(state: AppState): Promise<AppState> {
+  const targetCategory = [...state.categories].sort((a, b) => a.order - b.order)[0];
+  if (!targetCategory) {
+    return state;
+  }
+
+  try {
+    const recommendedBookmarks = await fetchRecommendedBookmarksConfig();
+    if (recommendedBookmarks.length === 0) {
+      return state;
+    }
+
+    const existingUrls = new Set(state.bookmarks.map((bookmark) => bookmark.url.toLowerCase()));
+    let nextOrder = state.bookmarks.filter((bookmark) => bookmark.categoryId === targetCategory.id)
+      .length;
+    const nextBookmarks = [...state.bookmarks];
+
+    for (const bookmark of recommendedBookmarks) {
+      const urlKey = bookmark.url.toLowerCase();
+      if (existingUrls.has(urlKey)) {
+        continue;
+      }
+
+      existingUrls.add(urlKey);
+      nextBookmarks.push({
+        id: crypto.randomUUID(),
+        title: bookmark.title,
+        url: bookmark.url,
+        icon: normalizeStoredIcon(bookmark.url, bookmark.icon),
+        categoryId: targetCategory.id,
+        order: nextOrder
+      });
+      nextOrder += 1;
+    }
+
+    return {
+      ...state,
+      bookmarks: nextBookmarks
+    };
+  } catch {
+    return state;
+  }
+}
+
+function createUniqueId(existingIds: Set<string>, preferredId?: string) {
+  if (preferredId && !existingIds.has(preferredId)) {
+    existingIds.add(preferredId);
+    return preferredId;
+  }
+
+  let nextId = crypto.randomUUID();
+  while (existingIds.has(nextId)) {
+    nextId = crypto.randomUUID();
+  }
+
+  existingIds.add(nextId);
+  return nextId;
+}
+
+function getComparableName(name: string) {
+  return name.trim().toLowerCase();
+}
+
+function mergeSyncedStateIntoLocal(localState: AppState, syncedState: AppState): AppState {
+  const localCategories = [...localState.categories].sort((a, b) => a.order - b.order);
+  const syncedCategories = [...syncedState.categories].sort((a, b) => a.order - b.order);
+  const categoryIds = new Set(localCategories.map((category) => category.id));
+  const bookmarkIds = new Set(localState.bookmarks.map((bookmark) => bookmark.id));
+  const bookmarkUrls = new Set(localState.bookmarks.map((bookmark) => bookmark.url.toLowerCase()));
+  const categoryIdMap = new Map<string, string>();
+  const categories = [...localCategories];
+
+  for (const syncedCategory of syncedCategories) {
+    const matchedLocalCategory = categories.find(
+      (category) => getComparableName(category.name) === getComparableName(syncedCategory.name)
+    );
+
+    if (matchedLocalCategory) {
+      categoryIdMap.set(syncedCategory.id, matchedLocalCategory.id);
+      continue;
+    }
+
+    const nextCategoryId = createUniqueId(categoryIds, syncedCategory.id);
+    categoryIdMap.set(syncedCategory.id, nextCategoryId);
+    categories.push({
+      ...syncedCategory,
+      id: nextCategoryId,
+      order: categories.length
+    });
+  }
+
+  const bookmarks = [...localState.bookmarks];
+  const nextOrderByCategoryId = new Map<string, number>();
+  for (const category of categories) {
+    nextOrderByCategoryId.set(
+      category.id,
+      bookmarks.filter((bookmark) => bookmark.categoryId === category.id).length
+    );
+  }
+
+  for (const syncedCategory of syncedCategories) {
+    const targetCategoryId = categoryIdMap.get(syncedCategory.id);
+    if (!targetCategoryId) {
+      continue;
+    }
+
+    const syncedBookmarks = syncedState.bookmarks
+      .filter((bookmark) => bookmark.categoryId === syncedCategory.id)
+      .sort((a, b) => a.order - b.order);
+
+    for (const syncedBookmark of syncedBookmarks) {
+      const urlKey = syncedBookmark.url.toLowerCase();
+      if (bookmarkUrls.has(urlKey)) {
+        continue;
+      }
+
+      bookmarkUrls.add(urlKey);
+      const nextOrder = nextOrderByCategoryId.get(targetCategoryId) ?? 0;
+      nextOrderByCategoryId.set(targetCategoryId, nextOrder + 1);
+      bookmarks.push({
+        ...syncedBookmark,
+        id: createUniqueId(bookmarkIds, syncedBookmark.id),
+        icon: normalizeStoredIcon(syncedBookmark.url, syncedBookmark.icon),
+        categoryId: targetCategoryId,
+        order: nextOrder
+      });
+    }
+  }
+
+  return {
+    ...localState,
+    categories: categories.map((category, index) => ({
+      ...category,
+      order: index
+    })),
+    bookmarks
+  };
 }
 
 let pendingSyncTimer: number | null = null;
@@ -605,28 +801,44 @@ export async function syncStateWithCloud(): Promise<{
     }
 
     const local = await loadLocalStoredState();
-    const synced = await loadSyncedState();
+    const initialLocalState = !local.meta
+      ? await mergeRecommendedBookmarksForNewInstall(local.state)
+      : local.state;
+    const synced = !local.meta || isBootstrapMeta(local.meta)
+      ? await loadSyncedStateWithRetry()
+      : await loadSyncedState();
 
     if (synced && synced.meta.updatedAt > (local.meta?.updatedAt ?? 0)) {
-      await saveLocalState(synced.state, synced.meta);
+      const mergedState = mergeSyncedStateIntoLocal(initialLocalState, synced.state);
+      await saveLocalState(mergedState, synced.meta);
       return {
-        state: synced.state,
+        state: mergedState,
         result: "downloaded"
       };
     }
 
     if (!local.meta) {
-      const meta = createMeta();
-      await saveLocalState(local.state, meta);
-      const syncResult = await saveStateToSync(local.state, meta);
+      const meta = createMeta(BOOTSTRAP_META_UPDATED_AT);
+      await saveLocalState(initialLocalState, meta);
+      return {
+        state: initialLocalState,
+        result: "already-synced"
+      };
+    }
+
+    if (synced && isBootstrapMeta(local.meta)) {
+      const mergedState = mergeSyncedStateIntoLocal(initialLocalState, synced.state);
+      await saveLocalState(mergedState, synced.meta);
+      return {
+        state: mergedState,
+        result: "downloaded"
+      };
+    }
+
+    if (isBootstrapMeta(local.meta)) {
       return {
         state: local.state,
-        result:
-          syncResult === "ok"
-            ? "uploaded"
-            : syncResult === "quota-exceeded"
-              ? "quota-exceeded"
-              : "unavailable"
+        result: "already-synced"
       };
     }
 
@@ -668,7 +880,10 @@ export async function getSyncSnapshot(): Promise<SyncSnapshot> {
       chunkCount: sync?.meta?.chunkCount ?? 0,
       size: sync?.size ?? 0,
       oversized: Boolean(sync?.meta?.oversized),
-      available: hasChromeSyncStorage()
+      available: hasChromeSyncStorage(),
+      rawKeyCount: sync?.rawKeyCount ?? 0,
+      hasChunkMeta: Boolean(sync?.hasChunkMeta),
+      hasLegacyState: Boolean(sync?.hasLegacyState)
     }
   };
 }

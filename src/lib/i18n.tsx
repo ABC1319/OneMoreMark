@@ -34,6 +34,11 @@ const messages = {
       oversized: "空间不足，仅保存在本机",
       chunks: "分片",
       size: "大小",
+      rawKeys: "云端键数量",
+      format: "格式",
+      chunkFormat: "新版分片",
+      legacyFormat: "旧版数据",
+      noneFormat: "无数据",
       syncNow: "同步云端",
       noTime: "暂无",
       toastUploaded: "同步成功",
@@ -63,7 +68,7 @@ const messages = {
       }
     },
     sidebar: {
-      brand: "TabCard"
+      brand: "OneMoreMark"
     },
     content: {
       importSuccess: "导入成功",
@@ -121,6 +126,11 @@ const messages = {
       oversized: "Storage limit exceeded, saved locally only",
       chunks: "Chunks",
       size: "Size",
+      rawKeys: "Cloud keys",
+      format: "Format",
+      chunkFormat: "Chunked",
+      legacyFormat: "Legacy",
+      noneFormat: "None",
       syncNow: "Sync now",
       noTime: "N/A",
       toastUploaded: "Sync completed",
@@ -150,7 +160,7 @@ const messages = {
       }
     },
     sidebar: {
-      brand: "TabCard"
+      brand: "OneMoreMark"
     },
     content: {
       importSuccess: "Import successful",

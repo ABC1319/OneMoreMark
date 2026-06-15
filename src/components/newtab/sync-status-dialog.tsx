@@ -101,6 +101,16 @@ export function SyncStatusDialog({
               <div className="mt-1 text-sm font-medium text-foreground">
                 {formatTime(snapshot?.cloud.updatedAt ?? null, locale, messages.sync.noTime)}
               </div>
+              <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                {messages.sync.rawKeys} {snapshot?.cloud.rawKeyCount ?? 0}
+                <span className="mx-2">/</span>
+                {messages.sync.format}{" "}
+                {snapshot?.cloud.hasChunkMeta
+                  ? messages.sync.chunkFormat
+                  : snapshot?.cloud.hasLegacyState
+                    ? messages.sync.legacyFormat
+                    : messages.sync.noneFormat}
+              </div>
             </div>
           </div>
         </div>

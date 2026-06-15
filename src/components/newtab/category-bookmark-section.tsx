@@ -4,7 +4,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown } from "lucide-react";
 import type { MutableRefObject, ReactNode, RefCallback } from "react";
 
-import type { Bookmark, Category } from "../../types/models";
+import type { Bookmark, Category, FeaturedLinkConfig } from "../../types/models";
 import { BookmarkCard } from "./bookmark-card";
 
 export type BookmarkGroup = {
@@ -22,6 +22,10 @@ type CategoryBookmarkSectionProps = {
   onRemoveBookmark: (bookmarkId: string) => void;
   sectionRefs: MutableRefObject<Record<string, HTMLElement | null>>;
   lockedHeight?: number;
+  featuredLink?: FeaturedLinkConfig | null;
+  featuredLinkText?: string;
+  showFeaturedLinkDot?: boolean;
+  onFeaturedLinkOpen?: () => void;
 };
 
 export function CategoryBookmarkSection({
@@ -33,7 +37,11 @@ export function CategoryBookmarkSection({
   onEditBookmark,
   onRemoveBookmark,
   sectionRefs,
-  lockedHeight
+  lockedHeight,
+  featuredLink,
+  featuredLinkText = "",
+  showFeaturedLinkDot = false,
+  onFeaturedLinkOpen
 }: CategoryBookmarkSectionProps) {
   const setSectionRef: RefCallback<HTMLElement> = (node) => {
     sectionRefs.current[group.category.id] = node;
@@ -46,18 +54,32 @@ export function CategoryBookmarkSection({
       style={lockedHeight ? { minHeight: lockedHeight } : undefined}
     >
       <div className="flex items-center justify-between border-b pb-2">
-        <div className="text-base font-semibold">{group.category.name}</div>
-        <button
-          type="button"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/70 bg-transparent text-foreground shadow-none transition-colors hover:border-border hover:bg-transparent hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)] dark:hover:border-white/12 dark:hover:shadow-[0_18px_36px_rgba(0,0,0,0.32)]"
-          onClick={onToggleCollapsed}
-        >
-          <ChevronDown
-            className={`h-4 w-4 transition-transform duration-200 ${
-              collapsed ? "-rotate-90" : "rotate-0"
-            }`}
-          />
-        </button>
+        <div className="min-w-0 truncate text-base font-semibold">{group.category.name}</div>
+        <div className="flex shrink-0 items-center gap-4">
+          {featuredLink?.enabled ? (
+            <button
+              type="button"
+              className="relative inline-flex items-center text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+              onClick={onFeaturedLinkOpen}
+            >
+              <span>{featuredLinkText}</span>
+              {showFeaturedLinkDot ? (
+                <span className="absolute -right-2 -top-1 h-1.5 w-1.5 rounded-full bg-red-500 ring-2 ring-background" />
+              ) : null}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/70 bg-transparent text-foreground shadow-none transition-colors hover:border-border hover:bg-transparent hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)] dark:hover:border-white/12 dark:hover:shadow-[0_18px_36px_rgba(0,0,0,0.32)]"
+            onClick={onToggleCollapsed}
+          >
+            <ChevronDown
+              className={`h-4 w-4 transition-transform duration-200 ${
+                collapsed ? "-rotate-90" : "rotate-0"
+              }`}
+            />
+          </button>
+        </div>
       </div>
       {collapsed ? null : (
         <SortableContext
