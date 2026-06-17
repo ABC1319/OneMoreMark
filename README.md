@@ -1,6 +1,6 @@
 # OneMoreMark
 
-[English](./README.md)
+[English](./README.en.md)
 
 如果你的浏览器书签栏已经放不下常用网站，书签文件夹越分越深，临时打开的资料页又总是舍不得关，OneMoreMark 就是为这种日常场景准备的。
 
