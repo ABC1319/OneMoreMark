@@ -1,6 +1,6 @@
 # OneMoreMark
 
-[简体中文](./README.zh-CN.md)
+[简体中文](./README.md)
 
 If your browser bookmark bar is already too crowded, your bookmark folders keep getting deeper, and your temporary research tabs are always too useful to close, OneMoreMark is built for that everyday situation.
 
